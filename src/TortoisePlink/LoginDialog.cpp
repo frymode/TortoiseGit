@@ -19,9 +19,39 @@
 #include "LoginDialog.h"
 #include "TortoisePlinkRes.h"
 #include <string>
+#include <ShlObj.h>
+#include <fstream>
 
 HINSTANCE g_hmodThisDll;
 HWND g_hwndMain;
+
+static std::string g_credentials_cache_path;
+static std::string g_cached_username;
+static std::string g_cached_password;
+
+static bool LoadCachedCredentials()
+{
+   g_cached_username.clear();
+   g_cached_password.clear();
+
+   if (g_credentials_cache_path.empty())
+   {
+      static TCHAR appdata_path[MAX_PATH];
+      ::SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, appdata_path);
+      g_credentials_cache_path = appdata_path;
+      g_credentials_cache_path += "\\plink.cache";
+   }
+
+   std::ifstream cache_stream(g_credentials_cache_path.c_str());
+   if (!cache_stream)
+   {
+      return false;
+   }
+
+   std::getline(cache_stream, g_cached_username);
+   std::getline(cache_stream, g_cached_password);
+   return true;
+}
 
 class LoginDialog
 {
@@ -48,6 +78,23 @@ private:
 
 BOOL DoLoginDialog(char* password, int maxlen, const char* prompt)
 {
+   if (strstr(prompt, "login") != NULL)
+   {
+      if (LoadCachedCredentials() && !g_cached_username.empty())
+      {
+         strncpy(password, g_cached_username.c_str(), maxlen);
+         return TRUE;
+      }
+   }
+   else if (strstr(prompt, "password") != NULL)
+   {
+      if (LoadCachedCredentials() && !g_cached_password.empty())
+      {
+         strncpy(password, g_cached_password.c_str(), maxlen);
+         return TRUE;
+      }
+   }
+
    g_hmodThisDll = GetModuleHandle(0);
    g_hwndMain = GetParentHwnd();
    std::string passwordstr;
